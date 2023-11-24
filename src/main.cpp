@@ -185,7 +185,7 @@ void ListCommand::Execute(Shell &shell) {
 }
 
 void ClearCommand::Execute(Shell &shell) {
-#ifdef __WIN32__
+#if defined(_WIN32)
   std::system("cls");
 #else
   std::system("clear");
