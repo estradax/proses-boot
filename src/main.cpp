@@ -8,6 +8,94 @@
 
 class Shell;
 
+class FileOrDirectory {
+public:
+  static FileOrDirectory CreateDirectory(const std::string &);
+
+  static FileOrDirectory CreateFile(const std::string &);
+
+  void Add(const FileOrDirectory &);
+
+  std::string Name() const;
+
+  bool IsDirectory() const;
+
+  std::vector<FileOrDirectory> Files() const;
+
+private:
+  FileOrDirectory(const std::string &, bool);
+
+private:
+  std::vector<FileOrDirectory> files_;
+
+  std::string name_;
+  bool is_directory_;
+};
+
+FileOrDirectory::FileOrDirectory(const std::string &name, bool is_directory)
+  : name_{name}, is_directory_{is_directory} {}
+
+FileOrDirectory FileOrDirectory::CreateDirectory(const std::string &name) {
+  return {name, true};
+}
+
+FileOrDirectory FileOrDirectory::CreateFile(const std::string &name) {
+  return {name, false};
+}
+
+void FileOrDirectory::Add(const FileOrDirectory &file) {
+  files_.push_back(file);
+}
+
+std::string FileOrDirectory::Name() const {
+  return name_;
+}
+
+bool FileOrDirectory::IsDirectory() const {
+  return is_directory_;
+}
+
+std::vector<FileOrDirectory> FileOrDirectory::Files() const {
+  return files_;
+}
+
+class FileSystem {
+public:
+  static FileSystem Populate();
+
+  void Add(const FileOrDirectory &);
+
+  std::vector<FileOrDirectory> Root() {
+    return root_;
+  }
+
+private:
+  FileSystem(const std::vector<FileOrDirectory> &);
+
+private:
+  std::vector<FileOrDirectory> root_;
+};
+
+FileSystem::FileSystem(const std::vector<FileOrDirectory> &root)
+  : root_{root} {}
+
+FileSystem FileSystem::Populate() {
+  auto tmp = FileOrDirectory::CreateDirectory("tmp");
+  tmp.Add(FileOrDirectory::CreateFile("tmp_file.txt"));
+
+  auto sys = FileOrDirectory::CreateDirectory("sys");
+
+  std::vector<FileOrDirectory> root {
+    tmp, sys
+  };
+
+  return {root};
+}
+
+void FileSystem::Add(const FileOrDirectory &file) {
+  root_.push_back(file);
+}
+
 class Command {
 public:
   virtual void Execute(Shell&) = 0;
@@ -19,6 +107,10 @@ public:
 
   void Shutdown();
 
+  std::vector<std::string> Cwd() {
+    return cwd_;
+  }
+
 private:
   Shell();
 
@@ -28,6 +120,8 @@ private:
   bool ContainsCommand(const std::string &);
 
 private:
+  std::vector<std::string> cwd_;
+
   bool is_running_;
   std::unordered_map<std::string, std::unique_ptr<Command>> commands_;
 };
@@ -39,8 +133,26 @@ public:
 
 class ListCommand : public Command {
 public:
+  ListCommand(const FileSystem &);
+
   virtual void Execute(Shell &);
+
+private:
+  void PrintList(const std::vector<FileOrDirectory> &);
+
+private:
+  FileSystem fs_;
 };
+
+ListCommand::ListCommand(const FileSystem &fs) : fs_{fs} {}
+
+void ListCommand::PrintList(const std::vector<FileOrDirectory> &files) {
+  for (const auto &f : files) {
+    std::cout << f.Name() << ' ';
+  }
+
+  std::cout << '\n';
+}
 
 class ClearCommand : public Command {
 public:
@@ -52,7 +164,24 @@ void ExitCommand::Execute(Shell &shell) {
 }
 
 void ListCommand::Execute(Shell &shell) {
-  std::cout << "unimplemented\n";
+  // you are on the root
+  if (shell.Cwd().size() == 1) {
+    PrintList(fs_.Root());
+    return;
+  }
+
+  auto files = fs_.Root();
+  auto cwd = shell.Cwd();
+
+  for (std::size_t i = 1; i < cwd.size(); i++) {
+    for (const auto &f : files) {
+      if (f.IsDirectory() && f.Name() == cwd[i]) {
+        files = f.Files();
+      }
+    }
+  }
+
+  PrintList(files);
 }
 
 void ClearCommand::Execute(Shell &shell) {
@@ -77,9 +206,11 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true} {
+Shell::Shell() : is_running_{true}, cwd_{"/"} {
+  auto fs = FileSystem::Populate();
+
   commands_.insert({"exit", std::make_unique<ExitCommand>()});
-  commands_.insert({"ls", std::make_unique<ListCommand>()});
+  commands_.insert({"ls", std::make_unique<ListCommand>(fs)});
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
 }
 
