@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -36,8 +37,26 @@ public:
   virtual void Execute(Shell &);
 };
 
+class ListCommand : public Command {
+public:
+  virtual void Execute(Shell &);
+};
+
+class ClearCommand : public Command {
+public:
+  virtual void Execute(Shell &);
+};
+
 void ExitCommand::Execute(Shell &shell) {
   shell.Shutdown();
+}
+
+void ListCommand::Execute(Shell &shell) {
+  std::cout << "unimplemented\n";
+}
+
+void ClearCommand::Execute(Shell &shell) {
+  std::system("clear");
 }
 
 void Shell::MainLoop() {
@@ -60,6 +79,8 @@ void Shell::Shutdown() {
 
 Shell::Shell() : is_running_{true} {
   commands_.insert({"exit", std::make_unique<ExitCommand>()});
+  commands_.insert({"ls", std::make_unique<ListCommand>()});
+  commands_.insert({"clear", std::make_unique<ClearCommand>()});
 }
 
 bool Shell::IsRunning() const {
