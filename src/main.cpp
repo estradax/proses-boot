@@ -185,7 +185,11 @@ void ListCommand::Execute(Shell &shell) {
 }
 
 void ClearCommand::Execute(Shell &shell) {
+#ifdef __WIN32__
+  std::system("cls");
+#else
   std::system("clear");
+#endif
 }
 
 void Shell::MainLoop() {
