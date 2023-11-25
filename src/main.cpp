@@ -20,31 +20,31 @@ public:
 
   bool IsDirectory() const;
 
-  std::vector<FileOrDirectory> Files() const;
+  std::shared_ptr<std::vector<FileOrDirectory>> Files() const;
 
 private:
-  FileOrDirectory(const std::string &, bool);
+  FileOrDirectory(const std::string &, bool, const std::shared_ptr<std::vector<FileOrDirectory>> &);
 
 private:
-  std::vector<FileOrDirectory> files_;
+  std::shared_ptr<std::vector<FileOrDirectory>> files_;
 
   std::string name_;
   bool is_directory_;
 };
 
-FileOrDirectory::FileOrDirectory(const std::string &name, bool is_directory)
-  : name_{name}, is_directory_{is_directory} {}
+FileOrDirectory::FileOrDirectory(const std::string &name, bool is_directory, const std::shared_ptr<std::vector<FileOrDirectory>> &files)
+  : name_{name}, is_directory_{is_directory}, files_{files} {}
 
 FileOrDirectory FileOrDirectory::CreateDirectory(const std::string &name) {
-  return {name, true};
+  return {name, true, std::make_shared<std::vector<FileOrDirectory>>()};
 }
 
 FileOrDirectory FileOrDirectory::CreateFile(const std::string &name) {
-  return {name, false};
+  return {name, false, std::make_shared<std::vector<FileOrDirectory>>()};
 }
 
 void FileOrDirectory::Add(const FileOrDirectory &file) {
-  files_.push_back(file);
+  files_->push_back(file);
 }
 
 std::string FileOrDirectory::Name() const {
@@ -55,7 +55,7 @@ bool FileOrDirectory::IsDirectory() const {
   return is_directory_;
 }
 
-std::vector<FileOrDirectory> FileOrDirectory::Files() const {
+std::shared_ptr<std::vector<FileOrDirectory>> FileOrDirectory::Files() const {
   return files_;
 }
 
@@ -65,29 +65,27 @@ public:
 
   void Add(const FileOrDirectory &);
 
-  std::vector<FileOrDirectory> Root() {
+  std::shared_ptr<std::vector<FileOrDirectory>> Root() {
     return root_;
   }
 
 private:
-  std::vector<FileOrDirectory> root_;
+  std::shared_ptr<std::vector<FileOrDirectory>> root_;
 };
 
 void FileSystem::Populate() {
   auto tmp = FileOrDirectory::CreateDirectory("tmp");
-  tmp.Add(FileOrDirectory::CreateFile("tmp_file.txt"));
+  tmp.Add(FileOrDirectory::CreateFile("file.txt"));
 
   auto sys = FileOrDirectory::CreateDirectory("sys");
 
-  std::vector<FileOrDirectory> root {
-    tmp, sys
-  };
-
-  root_ = root;
+  root_ = std::make_shared<std::vector<FileOrDirectory>>();
+  root_->push_back(tmp);
+  root_->push_back(sys);
 }
 
 void FileSystem::Add(const FileOrDirectory &file) {
-  root_.push_back(file);
+  root_->push_back(file);
 }
 
 class Command {
@@ -176,7 +174,7 @@ void ExitCommand::Execute(Shell &shell) {
 void ListCommand::Execute(Shell &shell) {
   // you are on the root
   if (shell.Cwd().size() == 1) {
-    PrintList(fs_->Root());
+    PrintList(*fs_->Root());
     return;
   }
 
@@ -184,14 +182,14 @@ void ListCommand::Execute(Shell &shell) {
   auto cwd = shell.Cwd();
 
   for (std::size_t i = 1; i < cwd.size(); i++) {
-    for (const auto &f : fs_->Root()) {
+    for (const auto &f : *files) {
       if (f.IsDirectory() && f.Name() == cwd[i]) {
         files = f.Files();
       }
     }
   }
 
-  PrintList(files);
+  PrintList(*files);
 }
 
 void MakeDirectoryCommand::Execute(Shell &shell) {
@@ -207,9 +205,9 @@ void MakeDirectoryCommand::Execute(Shell &shell) {
 
   for (std::size_t i = 1; i < args.size(); i++) {
     if (cwd.size() == 1) {
-      for (const auto &f : fs_->Root()) {
-        if (f.Name() == args[i]) {
-          std::cout << args[0] << ": file exists\n";
+      for (const auto &f : *fs_->Root()) {
+        if (f.IsDirectory() && f.Name() == args[i]) {
+          std::cout << args[0] << ": directory exists\n";
           is_exists = true;
         }
       }
@@ -219,6 +217,29 @@ void MakeDirectoryCommand::Execute(Shell &shell) {
       }
       is_exists = false;
     }
+  }
+
+  auto files = fs_->Root();
+  for (std::size_t i = 1; i < cwd.size(); i++) {
+    for (const auto &f : *files) {
+      if (f.IsDirectory() && f.Name() == cwd[i]) {
+        files = f.Files();
+      }
+    }
+  }
+
+  for (std::size_t i = 1; i < args.size(); i++) {
+    for (const auto &f : *files) {
+      if (f.IsDirectory() && f.Name() == args[i]) {
+        std::cout << args[0] << ": directory exists\n";
+        is_exists = true;
+      }
+    }
+
+    if (!is_exists) {
+      files->push_back(FileOrDirectory::CreateDirectory(args[i]));
+    }
+    is_exists = false;
   }
 }
 
@@ -248,7 +269,7 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true}, cwd_{"/"} {
+Shell::Shell() : is_running_{true}, cwd_{"/", "tmp"} {
   auto fs = std::make_shared<FileSystem>();
   fs->Populate();
 
