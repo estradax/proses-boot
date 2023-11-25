@@ -61,7 +61,7 @@ std::vector<FileOrDirectory> FileOrDirectory::Files() const {
 
 class FileSystem {
 public:
-  static FileSystem Populate();
+  void Populate();
 
   void Add(const FileOrDirectory &);
 
@@ -70,16 +70,10 @@ public:
   }
 
 private:
-  FileSystem(const std::vector<FileOrDirectory> &);
-
-private:
   std::vector<FileOrDirectory> root_;
 };
 
-FileSystem::FileSystem(const std::vector<FileOrDirectory> &root)
-  : root_{root} {}
-
-FileSystem FileSystem::Populate() {
+void FileSystem::Populate() {
   auto tmp = FileOrDirectory::CreateDirectory("tmp");
   tmp.Add(FileOrDirectory::CreateFile("tmp_file.txt"));
 
@@ -89,7 +83,7 @@ FileSystem FileSystem::Populate() {
     tmp, sys
   };
 
-  return {root};
+  root_ = root;
 }
 
 void FileSystem::Add(const FileOrDirectory &file) {
@@ -111,19 +105,23 @@ public:
     return cwd_;
   }
 
+  std::vector<std::string> Args() const;
+
 private:
   Shell();
 
-  bool IsRunning() const;
   std::vector<std::string> Tokenize(std::string);
   void ParseArgs(const std::vector<std::string> &);
   bool ContainsCommand(const std::string &);
+
+  bool IsRunning() const;
 
 private:
   std::vector<std::string> cwd_;
 
   bool is_running_;
   std::unordered_map<std::string, std::unique_ptr<Command>> commands_;
+  std::vector<std::string> args_;
 };
 
 class ExitCommand : public Command {
@@ -133,7 +131,7 @@ public:
 
 class ListCommand : public Command {
 public:
-  ListCommand(const FileSystem &);
+  ListCommand(const std::shared_ptr<FileSystem> &);
 
   virtual void Execute(Shell &);
 
@@ -141,10 +139,10 @@ private:
   void PrintList(const std::vector<FileOrDirectory> &);
 
 private:
-  FileSystem fs_;
+  std::shared_ptr<FileSystem> fs_;
 };
 
-ListCommand::ListCommand(const FileSystem &fs) : fs_{fs} {}
+ListCommand::ListCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
 
 void ListCommand::PrintList(const std::vector<FileOrDirectory> &files) {
   for (const auto &f : files) {
@@ -153,6 +151,18 @@ void ListCommand::PrintList(const std::vector<FileOrDirectory> &files) {
 
   std::cout << '\n';
 }
+
+class MakeDirectoryCommand : public Command {
+public:
+  MakeDirectoryCommand(const std::shared_ptr<FileSystem> &);
+
+  virtual void Execute(Shell &);
+
+private:
+  std::shared_ptr<FileSystem> fs_;
+};
+
+MakeDirectoryCommand::MakeDirectoryCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
 
 class ClearCommand : public Command {
 public:
@@ -166,15 +176,15 @@ void ExitCommand::Execute(Shell &shell) {
 void ListCommand::Execute(Shell &shell) {
   // you are on the root
   if (shell.Cwd().size() == 1) {
-    PrintList(fs_.Root());
+    PrintList(fs_->Root());
     return;
   }
 
-  auto files = fs_.Root();
+  auto files = fs_->Root();
   auto cwd = shell.Cwd();
 
   for (std::size_t i = 1; i < cwd.size(); i++) {
-    for (const auto &f : files) {
+    for (const auto &f : fs_->Root()) {
       if (f.IsDirectory() && f.Name() == cwd[i]) {
         files = f.Files();
       }
@@ -182,6 +192,34 @@ void ListCommand::Execute(Shell &shell) {
   }
 
   PrintList(files);
+}
+
+void MakeDirectoryCommand::Execute(Shell &shell) {
+  auto args = shell.Args();
+
+  if (args.size() == 1) {
+    std::cout << args[0] << ": missing operand\n";
+    return;
+  }
+
+  auto cwd = shell.Cwd();
+  bool is_exists = false;
+
+  for (std::size_t i = 1; i < args.size(); i++) {
+    if (cwd.size() == 1) {
+      for (const auto &f : fs_->Root()) {
+        if (f.Name() == args[i]) {
+          std::cout << args[0] << ": file exists\n";
+          is_exists = true;
+        }
+      }
+
+      if (!is_exists) {
+        fs_->Add(FileOrDirectory::CreateDirectory(args[i]));
+      }
+      is_exists = false;
+    }
+  }
 }
 
 void ClearCommand::Execute(Shell &shell) {
@@ -211,15 +249,21 @@ void Shell::Shutdown() {
 }
 
 Shell::Shell() : is_running_{true}, cwd_{"/"} {
-  auto fs = FileSystem::Populate();
+  auto fs = std::make_shared<FileSystem>();
+  fs->Populate();
 
   commands_.insert({"exit", std::make_unique<ExitCommand>()});
   commands_.insert({"ls", std::make_unique<ListCommand>(fs)});
+  commands_.insert({"mkdir", std::make_unique<MakeDirectoryCommand>(fs)});
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
 }
 
 bool Shell::IsRunning() const {
   return is_running_;
+}
+
+std::vector<std::string> Shell::Args() const {
+  return args_;
 }
 
 static inline void rtrim(std::string &s) {
@@ -247,6 +291,8 @@ void Shell::ParseArgs(const std::vector<std::string> &args) {
   if (args.size() < 1) {
     return;
   }
+
+  args_ = args;
 
   auto cmd = args[0];
   if (ContainsCommand(cmd)) {
