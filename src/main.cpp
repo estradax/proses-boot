@@ -65,6 +65,8 @@ public:
 
   void Add(const FileOrDirectory &);
 
+  void TraverseDirectory(const std::vector<std::string> &, const std::function<void(std::shared_ptr<std::vector<FileOrDirectory>>)> &func);
+
   std::shared_ptr<std::vector<FileOrDirectory>> Root() {
     return root_;
   }
@@ -79,13 +81,36 @@ void FileSystem::Populate() {
 
   auto sys = FileOrDirectory::CreateDirectory("sys");
 
+  auto usr = FileOrDirectory::CreateDirectory("usr");
+  usr.Add(FileOrDirectory::CreateDirectory("bin"));
+
   root_ = std::make_shared<std::vector<FileOrDirectory>>();
   root_->push_back(tmp);
   root_->push_back(sys);
+  root_->push_back(usr);
 }
 
 void FileSystem::Add(const FileOrDirectory &file) {
   root_->push_back(file);
+}
+
+void FileSystem::TraverseDirectory(const std::vector<std::string> &cwd, const std::function<void(std::shared_ptr<std::vector<FileOrDirectory>>)> &func) {
+  if (cwd.size() == 1) {
+    func(root_);
+    return;
+  }
+
+  auto files = root_;
+
+  for (std::size_t i = 1; i < cwd.size(); i++) {
+    for (const auto &f : *files) {
+      if (f.IsDirectory() && f.Name() == cwd[i]) {
+        files = f.Files();
+      }
+    }
+  }
+
+  func(files);
 }
 
 class Command {
@@ -134,21 +159,10 @@ public:
   virtual void Execute(Shell &);
 
 private:
-  void PrintList(const std::vector<FileOrDirectory> &);
-
-private:
   std::shared_ptr<FileSystem> fs_;
 };
 
 ListCommand::ListCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
-
-void ListCommand::PrintList(const std::vector<FileOrDirectory> &files) {
-  for (const auto &f : files) {
-    std::cout << f.Name() << ' ';
-  }
-
-  std::cout << '\n';
-}
 
 class MakeDirectoryCommand : public Command {
 public:
@@ -172,24 +186,13 @@ void ExitCommand::Execute(Shell &shell) {
 }
 
 void ListCommand::Execute(Shell &shell) {
-  // you are on the root
-  if (shell.Cwd().size() == 1) {
-    PrintList(*fs_->Root());
-    return;
-  }
-
-  auto files = fs_->Root();
-  auto cwd = shell.Cwd();
-
-  for (std::size_t i = 1; i < cwd.size(); i++) {
+  fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
     for (const auto &f : *files) {
-      if (f.IsDirectory() && f.Name() == cwd[i]) {
-        files = f.Files();
-      }
+      std::cout << f.Name() << ' ';
     }
-  }
 
-  PrintList(*files);
+    std::cout << '\n';
+  });
 }
 
 void MakeDirectoryCommand::Execute(Shell &shell) {
@@ -200,47 +203,23 @@ void MakeDirectoryCommand::Execute(Shell &shell) {
     return;
   }
 
-  auto cwd = shell.Cwd();
-  bool is_exists = false;
+  fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
+    bool is_exists = false;
 
-  for (std::size_t i = 1; i < args.size(); i++) {
-    if (cwd.size() == 1) {
-      for (const auto &f : *fs_->Root()) {
-        if (f.IsDirectory() && f.Name() == args[i]) {
+    for (std::size_t i = 1; i < args.size(); i++) {
+      for(const auto &file : *files) {
+        if (file.IsDirectory() && file.Name() == args[i]) {
           std::cout << args[0] << ": directory exists\n";
           is_exists = true;
         }
       }
 
       if (!is_exists) {
-        fs_->Add(FileOrDirectory::CreateDirectory(args[i]));
+        files->push_back(FileOrDirectory::CreateDirectory(args[i]));
       }
       is_exists = false;
     }
-  }
-
-  auto files = fs_->Root();
-  for (std::size_t i = 1; i < cwd.size(); i++) {
-    for (const auto &f : *files) {
-      if (f.IsDirectory() && f.Name() == cwd[i]) {
-        files = f.Files();
-      }
-    }
-  }
-
-  for (std::size_t i = 1; i < args.size(); i++) {
-    for (const auto &f : *files) {
-      if (f.IsDirectory() && f.Name() == args[i]) {
-        std::cout << args[0] << ": directory exists\n";
-        is_exists = true;
-      }
-    }
-
-    if (!is_exists) {
-      files->push_back(FileOrDirectory::CreateDirectory(args[i]));
-    }
-    is_exists = false;
-  }
+  });
 }
 
 void ClearCommand::Execute(Shell &shell) {
@@ -269,7 +248,7 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true}, cwd_{"/", "tmp"} {
+Shell::Shell() : is_running_{true}, cwd_{"/"} {
   auto fs = std::make_shared<FileSystem>();
   fs->Populate();
 
