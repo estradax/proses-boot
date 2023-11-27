@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
+#include <functional>
 
 class Shell;
 
