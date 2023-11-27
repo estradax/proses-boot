@@ -78,6 +78,7 @@ private:
 void FileSystem::Populate() {
   auto tmp = FileOrDirectory::CreateDirectory("tmp");
   tmp.Add(FileOrDirectory::CreateFile("file.txt"));
+  tmp.Add(FileOrDirectory::CreateFile("file2.txt"));
 
   auto sys = FileOrDirectory::CreateDirectory("sys");
 
@@ -162,6 +163,18 @@ private:
   std::shared_ptr<FileSystem> fs_;
 };
 
+class RemoveCommand : public Command {
+public:
+  RemoveCommand(const std::shared_ptr<FileSystem> &);
+
+  virtual void Execute(Shell &);
+
+private:
+  std::shared_ptr<FileSystem> fs_;
+};
+
+RemoveCommand::RemoveCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
+
 ListCommand::ListCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
 
 class MakeDirectoryCommand : public Command {
@@ -192,6 +205,29 @@ void ListCommand::Execute(Shell &shell) {
     }
 
     std::cout << '\n';
+  });
+}
+
+void RemoveCommand::Execute(Shell &shell) {
+  auto args = shell.Args();
+
+  fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
+    bool is_exists = false;
+
+    for (std::size_t i = 1; i < args.size(); i++) {
+      auto it = files->begin();
+      for (; it != files->end(); it++) {
+        if (!it->IsDirectory() && it->Name() == args[i]) {
+          is_exists = true; 
+          break;
+        }
+      }
+      
+      if (is_exists) {
+        files->erase(it);
+        is_exists = false;
+      }
+    }
   });
 }
 
@@ -248,7 +284,7 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true}, cwd_{"/"} {
+Shell::Shell() : is_running_{true}, cwd_{"/", "tmp"} {
   auto fs = std::make_shared<FileSystem>();
   fs->Populate();
 
@@ -256,6 +292,7 @@ Shell::Shell() : is_running_{true}, cwd_{"/"} {
   commands_.insert({"ls", std::make_unique<ListCommand>(fs)});
   commands_.insert({"mkdir", std::make_unique<MakeDirectoryCommand>(fs)});
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
+  commands_.insert({"rm", std::make_unique<RemoveCommand>(fs)});
 }
 
 bool Shell::IsRunning() const {
