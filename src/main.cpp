@@ -9,6 +9,47 @@
 
 class Shell;
 
+class Argument {
+public:
+  bool HasParameters() const;
+
+  std::string ProgramName() const;
+  std::vector<std::string> Parameters() const;
+
+  void SetProgramName(const std::string &);
+  void SetParameters(const std::vector<std::string> &);
+  void SetOptions(const std::vector<std::string> &);
+
+private:
+  std::string program_name_;
+  std::vector<std::string> options_;
+  std::vector<std::string> parameters_;
+};
+
+bool Argument::HasParameters() const {
+  return parameters_.size() > 0;
+}
+
+std::string Argument::ProgramName() const {
+  return program_name_;
+}
+
+std::vector<std::string> Argument::Parameters() const {
+  return parameters_;
+}
+
+void Argument::SetProgramName(const std::string &program_name) {
+  program_name_ = program_name;
+}
+
+void Argument::SetOptions(const std::vector<std::string> &options) {
+  options_ = options;
+}
+
+void Argument::SetParameters(const std::vector<std::string> &parameters) {
+  parameters_ = parameters;
+}
+
 class FileOrDirectory {
 public:
   static FileOrDirectory CreateDirectory(const std::string &);
@@ -130,7 +171,7 @@ public:
     return cwd_;
   }
 
-  std::vector<std::string> Args() const;
+  Argument Arg() const;
 
 private:
   Shell();
@@ -146,7 +187,7 @@ private:
 
   bool is_running_;
   std::unordered_map<std::string, std::unique_ptr<Command>> commands_;
-  std::vector<std::string> args_;
+  Argument arg_;
 };
 
 class ExitCommand : public Command {
@@ -210,15 +251,20 @@ void ListCommand::Execute(Shell &shell) {
 }
 
 void RemoveCommand::Execute(Shell &shell) {
-  auto args = shell.Args();
+  auto arg = shell.Arg();
+
+  if (!arg.HasParameters()) {
+    std::cout << arg.ProgramName() << ": missing operand\n";
+    return;
+  }
 
   fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
     bool is_exists = false;
 
-    for (std::size_t i = 1; i < args.size(); i++) {
+    for (const auto &parameter : arg.Parameters()) {
       auto it = files->begin();
       for (; it != files->end(); it++) {
-        if (!it->IsDirectory() && it->Name() == args[i]) {
+        if (!it->IsDirectory() && it->Name() == parameter) {
           is_exists = true; 
           break;
         }
@@ -233,26 +279,26 @@ void RemoveCommand::Execute(Shell &shell) {
 }
 
 void MakeDirectoryCommand::Execute(Shell &shell) {
-  auto args = shell.Args();
+  auto arg = shell.Arg();
 
-  if (args.size() == 1) {
-    std::cout << args[0] << ": missing operand\n";
+  if (!arg.HasParameters()) {
+    std::cout << arg.ProgramName() << ": missing operand\n";
     return;
   }
 
   fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
     bool is_exists = false;
 
-    for (std::size_t i = 1; i < args.size(); i++) {
+    for (const auto &parameter : arg.Parameters()) {
       for(const auto &file : *files) {
-        if (file.IsDirectory() && file.Name() == args[i]) {
-          std::cout << args[0] << ": directory exists\n";
+        if (file.IsDirectory() && file.Name() == parameter) {
+          std::cout << arg.ProgramName() << ": directory exists\n";
           is_exists = true;
         }
       }
 
       if (!is_exists) {
-        files->push_back(FileOrDirectory::CreateDirectory(args[i]));
+        files->push_back(FileOrDirectory::CreateDirectory(parameter));
       }
       is_exists = false;
     }
@@ -300,8 +346,8 @@ bool Shell::IsRunning() const {
   return is_running_;
 }
 
-std::vector<std::string> Shell::Args() const {
-  return args_;
+Argument Shell::Arg() const {
+  return arg_;
 }
 
 static inline void rtrim(std::string &s) {
@@ -330,9 +376,27 @@ void Shell::ParseArgs(const std::vector<std::string> &args) {
     return;
   }
 
-  args_ = args;
+  Argument argument{};
+  argument.SetProgramName(args[0]);
 
-  auto cmd = args[0];
+  std::vector<std::string> parameters{};
+  std::vector<std::string> options{};
+  if (args.size() > 1) {
+    for (std::size_t i = 1; i < args.size(); i++) {
+      if (args[i].find('-') == 0) {
+        options.push_back(args[i]);
+      } else {
+        parameters.push_back(args[i]);
+      }
+    }
+  }
+
+  argument.SetParameters(parameters);
+  argument.SetOptions(options);
+
+  arg_ = argument;
+
+  auto cmd = arg_.ProgramName();
   if (ContainsCommand(cmd)) {
     commands_[cmd]->Execute(*this);
     return;
