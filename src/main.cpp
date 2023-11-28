@@ -161,9 +161,57 @@ public:
   virtual void Execute(Shell&) = 0;
 };
 
+class User {
+public:
+  User() = default;
+
+  static User Create(const std::string &, const std::string &);
+  static User CreateSuperuser(const std::string &, const std::string &);
+
+  std::string Login() const;
+  std::string Password() const;
+  bool IsSuperuser() const;
+
+private:
+  User(const std::string &, const std::string &, bool);
+
+private:
+  std::string login_;
+  std::string password_;
+
+  bool is_superuser_;
+};
+
+User::User(const std::string &login, const std::string &password, bool is_superuser)
+  : login_{login}, password_{password}, is_superuser_{is_superuser} {}
+
+User User::Create(const std::string &login, const std::string &password) {
+  return {login, password, false};
+}
+
+User User::CreateSuperuser(const std::string &login, const std::string &password) {
+  return {login, password, true};
+}
+
+std::string User::Login() const {
+  return login_;
+}
+
+std::string User::Password() const {
+  return password_;
+}
+
+bool User::IsSuperuser() const {
+  return is_superuser_;
+}
+
 class Shell {
 public:
   static void MainLoop();
+
+  void DisplayPrompt();
+
+  bool IsAuthenticating();
 
   void Shutdown();
 
@@ -172,6 +220,7 @@ public:
   }
 
   Argument Arg() const;
+  User CurrentUser() const;
 
 private:
   Shell();
@@ -183,12 +232,53 @@ private:
   bool IsRunning() const;
 
 private:
+  std::vector<User> users_;
+  User current_user_;
+
   std::vector<std::string> cwd_;
 
   bool is_running_;
   std::unordered_map<std::string, std::unique_ptr<Command>> commands_;
   Argument arg_;
 };
+
+void Shell::DisplayPrompt() {
+  std::cout << current_user_.Login() << '@' << "desktop:";
+  for (std::size_t i = 0; i < cwd_.size(); i++) {
+    if (i == 0 || i == cwd_.size() - 1) {
+      std::cout << cwd_[i];
+    } else {
+      std::cout << cwd_[i];
+    }
+  }
+
+  std::cout << "$ ";
+}
+
+User Shell::CurrentUser() const {
+  return current_user_;
+}
+
+bool Shell::IsAuthenticating() {
+  std::string login;
+  std::string password;
+
+  std::cout << "login: ";
+  std::getline(std::cin, login);
+
+  std::cout << "password: ";
+  std::getline(std::cin, password);
+
+  for (const auto &user : users_) {
+    if (user.Login() == login && user.Password() == password) {
+      current_user_ = user;
+      return true;
+    }
+  }
+
+  std::cout << "invalid login\n";
+  return false;
+}
 
 class ExitCommand : public Command {
 public:
@@ -316,10 +406,12 @@ void ClearCommand::Execute(Shell &shell) {
 void Shell::MainLoop() {
   Shell shell;
 
+  while (!shell.IsAuthenticating()) {}
+
   std::string input;
 
   while (shell.IsRunning()) {
-    std::cout << ">> ";
+    shell.DisplayPrompt();
     std::getline(std::cin, input);
     
     auto args = shell.Tokenize(input);
@@ -334,6 +426,10 @@ void Shell::Shutdown() {
 Shell::Shell() : is_running_{true}, cwd_{"/", "tmp"} {
   auto fs = std::make_shared<FileSystem>();
   fs->Populate();
+  users_ = {
+    User::CreateSuperuser("root", "12345678"),
+    User::Create("user", "12345678")
+  };
 
   commands_.insert({"exit", std::make_unique<ExitCommand>()});
   commands_.insert({"ls", std::make_unique<ListCommand>(fs)});
