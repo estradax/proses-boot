@@ -248,7 +248,7 @@ void Shell::DisplayPrompt() {
     if (i == 0 || i == cwd_.size() - 1) {
       std::cout << cwd_[i];
     } else {
-      std::cout << cwd_[i];
+      std::cout << cwd_[i] << '/';
     }
   }
 
