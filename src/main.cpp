@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <unordered_map>
 #include <functional>
+#include <thread>
+#include <chrono>
 
 class Shell;
 
@@ -505,7 +507,43 @@ bool Shell::ContainsCommand(const std::string &cmd) {
   return commands_.find(cmd) != commands_.end();
 }
 
+void Boot() {
+  std::cout << "Finding bios...\n";
+  std::cout << "Executing bios...\n";
+  std::cout << "POST\n";
+  std::cout << "Test block memory a...\n";
+  std::cout << "Test block memory b...\n";
+  std::cout << "Test block memory c...\n";
+  std::cout << "Test block memory d...\n";
+  std::cout << "Test block memory e...\n";
+  std::cout << "Finding graphic cards...\n";
+  std::cout << "Finding operating system...\n";
+
+  float progress = 0.0;
+  while (progress < 1.0) {
+    int bar_width = 70;
+
+    std::cout << "[";
+    int pos = bar_width * progress;
+    for (int i = 0; i < bar_width; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
+
+    progress += 0.16; // for demonstration only
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+
+  std::cout << std::endl;
+}
+
 int main() {
+  Boot();
+
   Shell::MainLoop();
 
   return 0;
