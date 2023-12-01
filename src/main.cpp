@@ -166,6 +166,7 @@ void FileOrDirectory::Add(const FileOrDirectory &file) {
 }
 
 void FileOrDirectory::SetPermission(unsigned char p) {
+  permission_ = 0;
   permission_ |= p;
 }
 
@@ -360,6 +361,45 @@ RemoveCommand::RemoveCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
 
 ListCommand::ListCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
 
+class ChangeModeCommand : public Command {
+public:
+  ChangeModeCommand(const std::shared_ptr<FileSystem> &);
+
+  virtual void Execute(Shell &);
+
+private:
+  std::shared_ptr<FileSystem> fs_;
+};
+
+ChangeModeCommand::ChangeModeCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
+
+void ChangeModeCommand::Execute(Shell &shell) {
+  auto arg = shell.Arg();
+  auto parameters = arg.Parameters();
+
+  if (parameters.size() < 2) {
+    std::cout << arg.ProgramName() << ": not enough parameters\n";
+    return;
+  }
+
+  auto mode = std::stoi(parameters[0]);
+  auto target = parameters[1];
+
+  if (mode < 0 && mode > 7) {
+    return;
+  }
+
+  fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
+    for (auto &file : *files) {
+      if (file.Name() == target) {
+        file.SetPermission(mode);
+        return;
+      }
+    }
+    std::cout << arg.ProgramName() << ": target not found\n";
+  });
+}
+
 class MakeDirectoryCommand : public Command {
 public:
   MakeDirectoryCommand(const std::shared_ptr<FileSystem> &);
@@ -534,6 +574,7 @@ Shell::Shell() : is_running_{true}, cwd_{"/"} {
   commands_.insert({"mkdir", std::make_unique<MakeDirectoryCommand>(fs)});
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
   commands_.insert({"rm", std::make_unique<RemoveCommand>(fs)});
+  commands_.insert({"chmod", std::make_unique<ChangeModeCommand>(fs)});
 }
 
 bool Shell::IsRunning() const {
