@@ -507,17 +507,118 @@ bool Shell::ContainsCommand(const std::string &cmd) {
   return commands_.find(cmd) != commands_.end();
 }
 
-void Boot() {
+class Motherboard {
+public:
+  struct CPU {
+    std::string name;
+    std::size_t bit;
+  };
+
+  struct RAM {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct Storage {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct VGA {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct PowerSupply {
+    std::string name;
+  };
+
+  Motherboard(const std::string &, const CPU &, const std::vector<RAM> &,
+      const std::vector<Storage> &, const std::vector<VGA> &, const PowerSupply &);
+
+  std::vector<VGA> VGAList() const; 
+
+private:
+  std::string name_;
+
+  CPU cpu_;
+  std::vector<RAM> ram_list_;
+  std::vector<Storage> storages_;
+  std::vector<VGA> vga_list_;
+  PowerSupply power_supply_;
+};
+
+Motherboard::Motherboard(const std::string &name, const CPU &cpu, const std::vector<RAM> &ram_list,
+    const std::vector<Storage> &storages, const std::vector<VGA> &vga_list, const PowerSupply &power_supply) :
+    name_{name}, cpu_{cpu}, ram_list_{ram_list}, storages_{storages}, vga_list_{vga_list}, power_supply_{power_supply} {}
+
+std::vector<Motherboard::VGA> Motherboard::VGAList() const {
+  return vga_list_;
+}
+
+class Computer {
+public:
+  static Computer Boot();
+
+private:
+  Computer(const Motherboard &);
+
+  Motherboard motherboard_;
+};
+
+Computer::Computer(const Motherboard &motherboard) : motherboard_{motherboard} {}
+
+Computer Computer::Boot() {
+  Motherboard::CPU cpu{.name = "AMD Ryzen 7 2700X", .bit = 64};
+
+  Motherboard::RAM ram{.name = "Corsair Vengeance DDR4", .capacity = 8};
+  std::vector<Motherboard::RAM> ram_list{ram, ram};
+
+  Motherboard::Storage storage{.name = "Samsung SSD 870 EVO", .capacity = 1024};
+  std::vector<Motherboard::Storage> storages{storage};
+
+  Motherboard::VGA vga{.name = "Asus ROG Strix RTX 2080", .capacity = 8};
+  std::vector<Motherboard::VGA> vga_list{vga};
+
+  Motherboard::PowerSupply power_supply{.name = "Asus ROG Thor"};
+
+  Motherboard motherboard{"AMD x570", cpu, ram_list, storages, vga_list, power_supply};
+
   std::cout << "Finding bios...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  std::cout << "BIOS found\n";
+
   std::cout << "Executing bios...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
   std::cout << "POST\n";
-  std::cout << "Test block memory a...\n";
-  std::cout << "Test block memory b...\n";
-  std::cout << "Test block memory c...\n";
-  std::cout << "Test block memory d...\n";
-  std::cout << "Test block memory e...\n";
-  std::cout << "Finding graphic cards...\n";
+  std::cout << "  Test block memory a...\n";
+  std::cout << "  Test block memory b...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "  Test block memory c...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "  Test block memory d...\n";
+  std::cout << "  Test block memory e...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  std::cout << "Checking graphic cards...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+  std::cout << "Graphic card found: \n";
+  for (const auto &v : motherboard.VGAList()) {
+    std::cout << "  " << v.name << '\n';
+  }
+
   std::cout << "Finding operating system...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  std::cout << "OS found\n";
+
+  std::cout << "Delivering to OS...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "Booting...\n";
 
   float progress = 0.0;
   while (progress < 1.0) {
@@ -535,14 +636,16 @@ void Boot() {
 
     progress += 0.16; // for demonstration only
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
   }
 
-  std::cout << std::endl;
+  std::cout << "\n\n";
+
+  return Computer{motherboard};
 }
 
 int main() {
-  Boot();
+  auto computer = Computer::Boot();
 
   Shell::MainLoop();
 
