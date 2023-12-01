@@ -140,18 +140,18 @@ void Computer::SetDateTime(const std::chrono::time_point<std::chrono::system_clo
 }
 
 Computer Computer::Boot() {
-  Motherboard::CPU cpu{.name = "AMD Ryzen 7 2700X", .bit = 64};
+  Motherboard::CPU cpu{"AMD Ryzen 7 2700X", 64};
 
-  Motherboard::RAM ram{.name = "Corsair Vengeance DDR4", .capacity = 8};
+  Motherboard::RAM ram{"Corsair Vengeance DDR4", 8};
   std::vector<Motherboard::RAM> ram_list{ram, ram};
 
-  Motherboard::Storage storage{.name = "Samsung SSD 870 EVO", .capacity = 1024};
+  Motherboard::Storage storage{"Samsung SSD 870 EVO", 1024};
   std::vector<Motherboard::Storage> storages{storage};
 
-  Motherboard::VGA vga{.name = "Asus ROG Strix RTX 2080", .capacity = 8};
+  Motherboard::VGA vga{"Asus ROG Strix RTX 2080", 8};
   std::vector<Motherboard::VGA> vga_list{vga};
 
-  Motherboard::PowerSupply power_supply{.name = "Asus ROG Thor"};
+  Motherboard::PowerSupply power_supply{"Asus ROG Thor"};
 
   Motherboard motherboard{"AMD x570", cpu, ram_list, storages, vga_list, power_supply};
 
