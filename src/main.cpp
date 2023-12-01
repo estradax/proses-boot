@@ -11,12 +11,64 @@
 
 class Shell;
 
+class User {
+public:
+  User() = default;
+
+  static User for_dev_create(const std::string &, bool);
+
+  static User Create(const std::string &, const std::string &);
+  static User CreateSuperuser(const std::string &, const std::string &);
+
+  std::string Login() const;
+  std::string Password() const;
+  bool IsSuperuser() const;
+
+private:
+  User(const std::string &, const std::string &, bool);
+
+private:
+  std::string login_;
+  std::string password_;
+
+  bool is_superuser_;
+};
+
+User User::for_dev_create(const std::string &login, bool is_superuser) {
+  return User{login, "", is_superuser};
+}
+
+User::User(const std::string &login, const std::string &password, bool is_superuser)
+  : login_{login}, password_{password}, is_superuser_{is_superuser} {}
+
+User User::Create(const std::string &login, const std::string &password) {
+  return {login, password, false};
+}
+
+User User::CreateSuperuser(const std::string &login, const std::string &password) {
+  return {login, password, true};
+}
+
+std::string User::Login() const {
+  return login_;
+}
+
+std::string User::Password() const {
+  return password_;
+}
+
+bool User::IsSuperuser() const {
+  return is_superuser_;
+}
+
 class Argument {
 public:
   bool HasParameters() const;
+  bool HasOptions() const;
 
   std::string ProgramName() const;
   std::vector<std::string> Parameters() const;
+  std::vector<std::string> Options() const;
 
   void SetProgramName(const std::string &);
   void SetParameters(const std::vector<std::string> &);
@@ -32,12 +84,20 @@ bool Argument::HasParameters() const {
   return parameters_.size() > 0;
 }
 
+bool Argument::HasOptions() const {
+  return options_.size() > 0;
+}
+
 std::string Argument::ProgramName() const {
   return program_name_;
 }
 
 std::vector<std::string> Argument::Parameters() const {
   return parameters_;
+}
+
+std::vector<std::string> Argument::Options() const {
+  return options_;
 }
 
 void Argument::SetProgramName(const std::string &program_name) {
@@ -52,15 +112,24 @@ void Argument::SetParameters(const std::vector<std::string> &parameters) {
   parameters_ = parameters;
 }
 
+#define READ_FLAG 4
+#define WRITE_FLAG 2
+#define EXECUTE_FLAG 1
+
 class FileOrDirectory {
 public:
+
   static FileOrDirectory CreateDirectory(const std::string &);
 
   static FileOrDirectory CreateFile(const std::string &);
 
   void Add(const FileOrDirectory &);
+  void SetPermission(unsigned char);
 
   std::string Name() const;
+  bool Readable() const;
+  bool Writeable() const;
+  bool Executable() const;
 
   bool IsDirectory() const;
 
@@ -74,6 +143,8 @@ private:
 
   std::string name_;
   bool is_directory_;
+
+  unsigned char permission_{0};
 };
 
 FileOrDirectory::FileOrDirectory(const std::string &name, bool is_directory, const std::shared_ptr<std::vector<FileOrDirectory>> &files)
@@ -84,15 +155,34 @@ FileOrDirectory FileOrDirectory::CreateDirectory(const std::string &name) {
 }
 
 FileOrDirectory FileOrDirectory::CreateFile(const std::string &name) {
-  return {name, false, std::make_shared<std::vector<FileOrDirectory>>()};
+  FileOrDirectory file{name, false, std::make_shared<std::vector<FileOrDirectory>>()};
+  file.SetPermission(READ_FLAG | WRITE_FLAG);
+
+  return file;
 }
 
 void FileOrDirectory::Add(const FileOrDirectory &file) {
   files_->push_back(file);
 }
 
+void FileOrDirectory::SetPermission(unsigned char p) {
+  permission_ |= p;
+}
+
 std::string FileOrDirectory::Name() const {
   return name_;
+}
+
+bool FileOrDirectory::Readable() const {
+  return (permission_ & READ_FLAG) == READ_FLAG;
+}
+
+bool FileOrDirectory::Writeable() const {
+  return (permission_ & WRITE_FLAG) == WRITE_FLAG;
+}
+
+bool FileOrDirectory::Executable() const {
+  return (permission_ & EXECUTE_FLAG) == EXECUTE_FLAG;
 }
 
 bool FileOrDirectory::IsDirectory() const {
@@ -105,7 +195,7 @@ std::shared_ptr<std::vector<FileOrDirectory>> FileOrDirectory::Files() const {
 
 class FileSystem {
 public:
-  void Populate();
+  void for_dev_populate();
 
   void Add(const FileOrDirectory &);
 
@@ -119,7 +209,7 @@ private:
   std::shared_ptr<std::vector<FileOrDirectory>> root_;
 };
 
-void FileSystem::Populate() {
+void FileSystem::for_dev_populate() {
   auto tmp = FileOrDirectory::CreateDirectory("tmp");
   tmp.Add(FileOrDirectory::CreateFile("file.txt"));
   tmp.Add(FileOrDirectory::CreateFile("file2.txt"));
@@ -133,6 +223,7 @@ void FileSystem::Populate() {
   root_->push_back(tmp);
   root_->push_back(sys);
   root_->push_back(usr);
+  root_->push_back(FileOrDirectory::CreateFile("log.txt"));
 }
 
 void FileSystem::Add(const FileOrDirectory &file) {
@@ -163,49 +254,7 @@ public:
   virtual void Execute(Shell&) = 0;
 };
 
-class User {
-public:
-  User() = default;
 
-  static User Create(const std::string &, const std::string &);
-  static User CreateSuperuser(const std::string &, const std::string &);
-
-  std::string Login() const;
-  std::string Password() const;
-  bool IsSuperuser() const;
-
-private:
-  User(const std::string &, const std::string &, bool);
-
-private:
-  std::string login_;
-  std::string password_;
-
-  bool is_superuser_;
-};
-
-User::User(const std::string &login, const std::string &password, bool is_superuser)
-  : login_{login}, password_{password}, is_superuser_{is_superuser} {}
-
-User User::Create(const std::string &login, const std::string &password) {
-  return {login, password, false};
-}
-
-User User::CreateSuperuser(const std::string &login, const std::string &password) {
-  return {login, password, true};
-}
-
-std::string User::Login() const {
-  return login_;
-}
-
-std::string User::Password() const {
-  return password_;
-}
-
-bool User::IsSuperuser() const {
-  return is_superuser_;
-}
 
 class Shell {
 public:
@@ -333,12 +382,58 @@ void ExitCommand::Execute(Shell &shell) {
 }
 
 void ListCommand::Execute(Shell &shell) {
+  auto arg = shell.Arg();
+
+  bool should_detail = false;
+  if (arg.HasOptions()) {
+    auto options = arg.Options();
+
+    for (const auto &option : options) {
+      if (option == "-l") {
+        should_detail = true;
+      }
+    }
+  }
+
   fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
-    for (const auto &f : *files) {
-      std::cout << f.Name() << ' ';
+    if (should_detail) {
+      std::cout << "total " << files->size() << '\n';
+      for (const auto &f : *files) {
+        if (f.IsDirectory()) {
+          std::cout << 'd';
+        } else {
+          std::cout << '-';
+        }
+
+        if (f.Readable()) {
+          std::cout << 'r';
+        } else {
+          std::cout << '-';
+        }
+
+        if (f.Writeable()) {
+          std::cout << 'w';
+        } else {
+          std::cout << '-';
+        }
+
+        if (f.Executable()) {
+          std::cout << 'x';
+        } else {
+          std::cout << '-';
+        }
+
+        std::cout << " " << f.Name() << '\n';
+      }     
+    } else {
+      for (const auto &f : *files) {
+        std::cout << f.Name() << ' ';
+      }
     }
 
-    std::cout << '\n';
+    if (!should_detail) {
+      std::cout << '\n';
+    }
   });
 }
 
@@ -425,9 +520,10 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true}, cwd_{"/", "tmp"} {
+Shell::Shell() : is_running_{true}, cwd_{"/"} {
   auto fs = std::make_shared<FileSystem>();
-  fs->Populate();
+  fs->for_dev_populate();
+
   users_ = {
     User::CreateSuperuser("root", "12345678"),
     User::Create("user", "12345678")
