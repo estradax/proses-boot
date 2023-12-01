@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -8,6 +9,7 @@
 #include <functional>
 #include <thread>
 #include <chrono>
+#include <sstream>
 
 class Shell;
 
@@ -114,6 +116,8 @@ class Computer {
 public:
   static Computer Boot();
 
+  void SetDateTime(const std::chrono::time_point<std::chrono::system_clock> &);
+
   std::chrono::time_point<std::chrono::system_clock> TimePoint() const;
 
 private:
@@ -129,6 +133,10 @@ Computer::Computer(const Motherboard &motherboard, const std::chrono::time_point
 
 std::chrono::time_point<std::chrono::system_clock> Computer::TimePoint() const {
   return time_point_;
+}
+
+void Computer::SetDateTime(const std::chrono::time_point<std::chrono::system_clock> &time_point) {
+  time_point_ = time_point;
 }
 
 Computer Computer::Boot() {
@@ -409,6 +417,8 @@ public:
 
   void MainLoop();
 
+  void SetDateTime(const std::chrono::time_point<std::chrono::system_clock> &);
+
   void DisplayPrompt();
 
   bool IsAuthenticating();
@@ -456,6 +466,10 @@ void Shell::DisplayPrompt() {
   }
 
   std::cout << "$ ";
+}
+
+void Shell::SetDateTime(const std::chrono::time_point<std::chrono::system_clock> &time_point) {
+  computer_.SetDateTime(time_point);
 }
 
 std::chrono::time_point<std::chrono::system_clock> Shell::DateTime() const {
@@ -538,7 +552,7 @@ void ChangeModeCommand::Execute(Shell &shell) {
   auto parameters = arg.Parameters();
 
   if (parameters.size() < 2) {
-    std::cout << arg.ProgramName() << ": not enough parameters\n";
+    std::cout << arg.ProgramName() << ": not enough parameter\n";
     return;
   }
 
@@ -561,8 +575,36 @@ void ChangeModeCommand::Execute(Shell &shell) {
 }
 
 void DateCommand::Execute(Shell &shell) {
-  auto tp = std::chrono::system_clock::to_time_t(shell.DateTime());
-  std::cout << std::ctime(&tp);
+  auto arg = shell.Arg();
+
+  if (!arg.HasParameters()) {
+    auto tp = std::chrono::system_clock::to_time_t(shell.DateTime());
+    std::cout << std::ctime(&tp);
+    return;
+  }
+
+  auto parameters = arg.Parameters();
+
+  if (parameters.size() < 2) {
+    std::cout << arg.ProgramName() << ": not enough parameter\n";
+    return;
+  }
+
+  auto format = parameters[0];
+  auto datetime = parameters[1];
+
+  std::stringstream datetime_stream{datetime};
+
+  std::tm tm{};
+  datetime_stream >> std::get_time(&tm, format.c_str());
+
+  if (datetime_stream.fail()) {
+    std::cout << arg.ProgramName() << ": failed to change date\n";
+    return;
+  }
+
+  auto tp = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+  shell.SetDateTime(tp);
 }
 
 class MakeDirectoryCommand : public Command {
