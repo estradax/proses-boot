@@ -61,6 +61,152 @@ bool User::IsSuperuser() const {
   return is_superuser_;
 }
 
+class Motherboard {
+public:
+  struct CPU {
+    std::string name;
+    std::size_t bit;
+  };
+
+  struct RAM {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct Storage {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct VGA {
+    std::string name;
+    std::size_t capacity;
+  };
+
+  struct PowerSupply {
+    std::string name;
+  };
+
+  Motherboard(const std::string &, const CPU &, const std::vector<RAM> &,
+      const std::vector<Storage> &, const std::vector<VGA> &, const PowerSupply &);
+
+  std::vector<VGA> VGAList() const; 
+
+private:
+  std::string name_;
+
+  CPU cpu_;
+  std::vector<RAM> ram_list_;
+  std::vector<Storage> storages_;
+  std::vector<VGA> vga_list_;
+  PowerSupply power_supply_;
+};
+
+Motherboard::Motherboard(const std::string &name, const CPU &cpu, const std::vector<RAM> &ram_list,
+    const std::vector<Storage> &storages, const std::vector<VGA> &vga_list, const PowerSupply &power_supply) :
+    name_{name}, cpu_{cpu}, ram_list_{ram_list}, storages_{storages}, vga_list_{vga_list}, power_supply_{power_supply} {}
+
+std::vector<Motherboard::VGA> Motherboard::VGAList() const {
+  return vga_list_;
+}
+
+class Computer {
+public:
+  static Computer Boot();
+
+  std::chrono::time_point<std::chrono::system_clock> TimePoint() const;
+
+private:
+  Computer(const Motherboard &, const std::chrono::time_point<std::chrono::system_clock> &);
+
+  Motherboard motherboard_;
+
+  std::chrono::time_point<std::chrono::system_clock> time_point_;
+};
+
+Computer::Computer(const Motherboard &motherboard, const std::chrono::time_point<std::chrono::system_clock> &time_point)
+  : motherboard_{motherboard}, time_point_{time_point} {}
+
+std::chrono::time_point<std::chrono::system_clock> Computer::TimePoint() const {
+  return time_point_;
+}
+
+Computer Computer::Boot() {
+  Motherboard::CPU cpu{.name = "AMD Ryzen 7 2700X", .bit = 64};
+
+  Motherboard::RAM ram{.name = "Corsair Vengeance DDR4", .capacity = 8};
+  std::vector<Motherboard::RAM> ram_list{ram, ram};
+
+  Motherboard::Storage storage{.name = "Samsung SSD 870 EVO", .capacity = 1024};
+  std::vector<Motherboard::Storage> storages{storage};
+
+  Motherboard::VGA vga{.name = "Asus ROG Strix RTX 2080", .capacity = 8};
+  std::vector<Motherboard::VGA> vga_list{vga};
+
+  Motherboard::PowerSupply power_supply{.name = "Asus ROG Thor"};
+
+  Motherboard motherboard{"AMD x570", cpu, ram_list, storages, vga_list, power_supply};
+
+  std::cout << "Finding bios...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  std::cout << "BIOS found\n";
+
+  std::cout << "Executing bios...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  std::cout << "POST\n";
+  std::cout << "  Test block memory a...\n";
+  std::cout << "  Test block memory b...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "  Test block memory c...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "  Test block memory d...\n";
+  std::cout << "  Test block memory e...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  std::cout << "Checking graphic cards...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+  std::cout << "Graphic card found: \n";
+  for (const auto &v : motherboard.VGAList()) {
+    std::cout << "  " << v.name << '\n';
+  }
+
+  std::cout << "Finding operating system...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  std::cout << "OS found\n";
+
+  std::cout << "Delivering to OS...\n";
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  std::cout << "Booting...\n";
+
+  float progress = 0.0;
+  while (progress < 1.0) {
+    int bar_width = 70;
+
+    std::cout << "[";
+    int pos = bar_width * progress;
+    for (int i = 0; i < bar_width; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
+
+    progress += 0.16; // for demonstration only
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  }
+
+  std::cout << "\n\n";
+
+  return Computer{motherboard, std::chrono::system_clock::now()};
+}
+
 class Argument {
 public:
   bool HasParameters() const;
@@ -240,7 +386,7 @@ void FileSystem::TraverseDirectory(const std::vector<std::string> &cwd, const st
   auto files = root_;
 
   for (std::size_t i = 1; i < cwd.size(); i++) {
-    for (const auto &f : *files) {
+    for (const auto &f : *files) { 
       if (f.IsDirectory() && f.Name() == cwd[i]) {
         files = f.Files();
       }
@@ -259,7 +405,9 @@ public:
 
 class Shell {
 public:
-  static void MainLoop();
+  Shell(const Computer &);
+
+  void MainLoop();
 
   void DisplayPrompt();
 
@@ -273,6 +421,7 @@ public:
 
   Argument Arg() const;
   User CurrentUser() const;
+  std::chrono::time_point<std::chrono::system_clock> DateTime() const;
 
 private:
   Shell();
@@ -292,6 +441,8 @@ private:
   bool is_running_;
   std::unordered_map<std::string, std::unique_ptr<Command>> commands_;
   Argument arg_;
+
+  Computer computer_;
 };
 
 void Shell::DisplayPrompt() {
@@ -305,6 +456,10 @@ void Shell::DisplayPrompt() {
   }
 
   std::cout << "$ ";
+}
+
+std::chrono::time_point<std::chrono::system_clock> Shell::DateTime() const {
+  return computer_.TimePoint();
 }
 
 User Shell::CurrentUser() const {
@@ -333,6 +488,11 @@ bool Shell::IsAuthenticating() {
 }
 
 class ExitCommand : public Command {
+public:
+  virtual void Execute(Shell &);
+};
+
+class DateCommand : public Command {
 public:
   virtual void Execute(Shell &);
 };
@@ -398,6 +558,11 @@ void ChangeModeCommand::Execute(Shell &shell) {
     }
     std::cout << arg.ProgramName() << ": target not found\n";
   });
+}
+
+void DateCommand::Execute(Shell &shell) {
+  auto tp = std::chrono::system_clock::to_time_t(shell.DateTime());
+  std::cout << std::ctime(&tp);
 }
 
 class MakeDirectoryCommand : public Command {
@@ -541,18 +706,16 @@ void ClearCommand::Execute(Shell &shell) {
 }
 
 void Shell::MainLoop() {
-  Shell shell;
-
-  while (!shell.IsAuthenticating()) {}
+  while (!IsAuthenticating()) {}
 
   std::string input;
 
-  while (shell.IsRunning()) {
-    shell.DisplayPrompt();
+  while (IsRunning()) {
+    DisplayPrompt();
     std::getline(std::cin, input);
     
-    auto args = shell.Tokenize(input);
-    shell.ParseArgs(args);
+    auto args = Tokenize(input);
+    ParseArgs(args);
   }
 }
 
@@ -560,7 +723,7 @@ void Shell::Shutdown() {
   is_running_ = false;
 }
 
-Shell::Shell() : is_running_{true}, cwd_{"/"} {
+Shell::Shell(const Computer &computer) : is_running_{true}, cwd_{"/"}, computer_{computer} {
   auto fs = std::make_shared<FileSystem>();
   fs->for_dev_populate();
 
@@ -575,6 +738,7 @@ Shell::Shell() : is_running_{true}, cwd_{"/"} {
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
   commands_.insert({"rm", std::make_unique<RemoveCommand>(fs)});
   commands_.insert({"chmod", std::make_unique<ChangeModeCommand>(fs)});
+  commands_.insert({"date", std::make_unique<DateCommand>()});
 }
 
 bool Shell::IsRunning() const {
@@ -644,147 +808,11 @@ bool Shell::ContainsCommand(const std::string &cmd) {
   return commands_.find(cmd) != commands_.end();
 }
 
-class Motherboard {
-public:
-  struct CPU {
-    std::string name;
-    std::size_t bit;
-  };
-
-  struct RAM {
-    std::string name;
-    std::size_t capacity;
-  };
-
-  struct Storage {
-    std::string name;
-    std::size_t capacity;
-  };
-
-  struct VGA {
-    std::string name;
-    std::size_t capacity;
-  };
-
-  struct PowerSupply {
-    std::string name;
-  };
-
-  Motherboard(const std::string &, const CPU &, const std::vector<RAM> &,
-      const std::vector<Storage> &, const std::vector<VGA> &, const PowerSupply &);
-
-  std::vector<VGA> VGAList() const; 
-
-private:
-  std::string name_;
-
-  CPU cpu_;
-  std::vector<RAM> ram_list_;
-  std::vector<Storage> storages_;
-  std::vector<VGA> vga_list_;
-  PowerSupply power_supply_;
-};
-
-Motherboard::Motherboard(const std::string &name, const CPU &cpu, const std::vector<RAM> &ram_list,
-    const std::vector<Storage> &storages, const std::vector<VGA> &vga_list, const PowerSupply &power_supply) :
-    name_{name}, cpu_{cpu}, ram_list_{ram_list}, storages_{storages}, vga_list_{vga_list}, power_supply_{power_supply} {}
-
-std::vector<Motherboard::VGA> Motherboard::VGAList() const {
-  return vga_list_;
-}
-
-class Computer {
-public:
-  static Computer Boot();
-
-private:
-  Computer(const Motherboard &);
-
-  Motherboard motherboard_;
-};
-
-Computer::Computer(const Motherboard &motherboard) : motherboard_{motherboard} {}
-
-Computer Computer::Boot() {
-  Motherboard::CPU cpu{.name = "AMD Ryzen 7 2700X", .bit = 64};
-
-  Motherboard::RAM ram{.name = "Corsair Vengeance DDR4", .capacity = 8};
-  std::vector<Motherboard::RAM> ram_list{ram, ram};
-
-  Motherboard::Storage storage{.name = "Samsung SSD 870 EVO", .capacity = 1024};
-  std::vector<Motherboard::Storage> storages{storage};
-
-  Motherboard::VGA vga{.name = "Asus ROG Strix RTX 2080", .capacity = 8};
-  std::vector<Motherboard::VGA> vga_list{vga};
-
-  Motherboard::PowerSupply power_supply{.name = "Asus ROG Thor"};
-
-  Motherboard motherboard{"AMD x570", cpu, ram_list, storages, vga_list, power_supply};
-
-  std::cout << "Finding bios...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
-  std::cout << "BIOS found\n";
-
-  std::cout << "Executing bios...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-  std::cout << "POST\n";
-  std::cout << "  Test block memory a...\n";
-  std::cout << "  Test block memory b...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-  std::cout << "  Test block memory c...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-  std::cout << "  Test block memory d...\n";
-  std::cout << "  Test block memory e...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-  std::cout << "Checking graphic cards...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(400));
-
-  std::cout << "Graphic card found: \n";
-  for (const auto &v : motherboard.VGAList()) {
-    std::cout << "  " << v.name << '\n';
-  }
-
-  std::cout << "Finding operating system...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
-  std::cout << "OS found\n";
-
-  std::cout << "Delivering to OS...\n";
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-  std::cout << "Booting...\n";
-
-  float progress = 0.0;
-  while (progress < 1.0) {
-    int bar_width = 70;
-
-    std::cout << "[";
-    int pos = bar_width * progress;
-    for (int i = 0; i < bar_width; ++i) {
-        if (i < pos) std::cout << "=";
-        else if (i == pos) std::cout << ">";
-        else std::cout << " ";
-    }
-    std::cout << "] " << int(progress * 100.0) << " %\r";
-    std::cout.flush();
-
-    progress += 0.16; // for demonstration only
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-  }
-
-  std::cout << "\n\n";
-
-  return Computer{motherboard};
-}
-
 int main() {
   auto computer = Computer::Boot();
 
-  Shell::MainLoop();
+  Shell shell{computer};
+  shell.MainLoop();
 
   return 0;
 }
