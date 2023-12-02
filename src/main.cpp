@@ -93,6 +93,7 @@ public:
       const std::vector<Storage> &, const std::vector<VGA> &, const PowerSupply &);
 
   std::vector<VGA> VGAList() const; 
+  std::vector<RAM> RAMList() const; 
 
 private:
   std::string name_;
@@ -112,6 +113,10 @@ std::vector<Motherboard::VGA> Motherboard::VGAList() const {
   return vga_list_;
 }
 
+std::vector<Motherboard::RAM> Motherboard::RAMList() const {
+  return ram_list_;
+}
+
 class Computer {
 public:
   static Computer Boot();
@@ -119,6 +124,7 @@ public:
   void SetDateTime(const std::chrono::time_point<std::chrono::system_clock> &);
 
   std::chrono::time_point<std::chrono::system_clock> TimePoint() const;
+  Motherboard GetMotherboard() const;
 
 private:
   Computer(const Motherboard &, const std::chrono::time_point<std::chrono::system_clock> &);
@@ -161,6 +167,16 @@ Computer Computer::Boot() {
 
   std::cout << "Executing bios...\n";
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  std::size_t ram_total_size = 0;
+  for (const auto &ram : motherboard.RAMList()) {
+    ram_total_size += ram.capacity;
+  }
+
+  std::cout << "RAM (" << ram_total_size << "GB):\n";
+  for (const auto &ram : motherboard.RAMList()) {
+    std::cout << "  " << ram.capacity << "GB" << '\n';
+  }
 
   std::cout << "POST\n";
   std::cout << "  Test block memory a...\n";
@@ -425,6 +441,9 @@ public:
 
   void Shutdown();
 
+  void Go(const std::string &);
+  void Back();
+
   std::vector<std::string> Cwd() {
     return cwd_;
   }
@@ -432,6 +451,7 @@ public:
   Argument Arg() const;
   User CurrentUser() const;
   std::chrono::time_point<std::chrono::system_clock> DateTime() const;
+  Computer GetComputer() const;
 
 private:
   Shell();
@@ -454,6 +474,18 @@ private:
 
   Computer computer_;
 };
+
+Computer Shell::GetComputer() const {
+  return computer_;
+}
+
+void Shell::Go(const std::string &path) {
+  cwd_.push_back(path);
+}
+
+void Shell::Back() {
+  cwd_.pop_back();
+}
 
 void Shell::DisplayPrompt() {
   std::cout << current_user_.Login() << '@' << "desktop:";
@@ -505,6 +537,57 @@ class ExitCommand : public Command {
 public:
   virtual void Execute(Shell &);
 };
+
+class ChangeDirectoryCommand : public Command {
+public:
+  ChangeDirectoryCommand(const std::shared_ptr<FileSystem> &);
+
+  virtual void Execute(Shell &);
+
+private:
+ std::shared_ptr<FileSystem> fs_;
+};
+
+ChangeDirectoryCommand::ChangeDirectoryCommand(const std::shared_ptr<FileSystem> &fs) : fs_{fs} {}
+
+void ChangeDirectoryCommand::Execute(Shell &shell) {
+  auto arg = shell.Arg();
+
+  if (!arg.HasParameters()) {
+    std::cout << arg.ProgramName() << ": missing operand\n";
+    return;
+  }
+
+  auto parameters = arg.Parameters();
+  auto target = parameters[0];
+
+  if (target == "..") {
+    if (shell.Cwd().size() == 1) {
+      return;
+    }
+
+    shell.Back();
+    return;
+  }
+
+  bool is_exists = false;
+
+  fs_->TraverseDirectory(shell.Cwd(), [&](std::shared_ptr<std::vector<FileOrDirectory>> files) {
+    for (const auto &file : *files) {
+      if (file.IsDirectory() && file.Name() == target) {
+        is_exists = true; 
+        return;
+      }
+    } 
+  });
+
+  if (!is_exists) {
+    std::cout << arg.ProgramName() << ": no such file or directory\n";
+    return;
+  }
+
+  shell.Go(target);
+}
 
 class DateCommand : public Command {
 public:
@@ -781,6 +864,7 @@ Shell::Shell(const Computer &computer) : is_running_{true}, cwd_{"/"}, computer_
   commands_.insert({"rm", std::make_unique<RemoveCommand>(fs)});
   commands_.insert({"chmod", std::make_unique<ChangeModeCommand>(fs)});
   commands_.insert({"date", std::make_unique<DateCommand>()});
+  commands_.insert({"cd", std::make_unique<ChangeDirectoryCommand>(fs)});
 }
 
 bool Shell::IsRunning() const {
