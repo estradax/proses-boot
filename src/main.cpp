@@ -533,7 +533,7 @@ bool Shell::IsAuthenticating() {
   return false;
 }
 
-class ExitCommand : public Command {
+class ShutdownCommand : public Command {
 public:
   virtual void Execute(Shell &);
 };
@@ -707,7 +707,7 @@ public:
   virtual void Execute(Shell &);
 };
 
-void ExitCommand::Execute(Shell &shell) {
+void ShutdownCommand::Execute(Shell &shell) {
   shell.Shutdown();
 }
 
@@ -857,7 +857,7 @@ Shell::Shell(const Computer &computer) : is_running_{true}, cwd_{"/"}, computer_
     User::Create("user", "12345678")
   };
 
-  commands_.insert({"shutdown", std::make_unique<ExitCommand>()});
+  commands_.insert({"shutdown", std::make_unique<ShutdownCommand>()});
   commands_.insert({"ls", std::make_unique<ListCommand>(fs)});
   commands_.insert({"mkdir", std::make_unique<MakeDirectoryCommand>(fs)});
   commands_.insert({"clear", std::make_unique<ClearCommand>()});
